@@ -12,7 +12,7 @@ const Leaderboard = (props) => {
   const [leaderboardData, setLeaderboardData] = useState([]);
 
   useEffect(() => {
-    axios.get("/leaderboard").then((response) => {
+    axios.get("https://pixelcide.herokuapp.com/leaderboard").then((response) => {
       setLeaderboardData(response.data);
       setFetchComplete(true);
     });

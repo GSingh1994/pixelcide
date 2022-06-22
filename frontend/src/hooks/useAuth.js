@@ -49,7 +49,7 @@ const useAuth = (socket) => {
 
   const updateUserAvatar = (avatarId) => {
     axios
-      .put("/users", {
+      .put("https://pixelcide.herokuapp.com/users", {
         user: {
           id: user.id,
           avatar_id: avatarId,
@@ -78,7 +78,7 @@ const useAuth = (socket) => {
       const user = { username, password };
 
       return axios
-        .post(`/login`, { user })
+        .post(`https://pixelcide.herokuapp.com/login`, { user })
         .then((response) => {
           setUser(response.data);
           setupSocketSession(response.data);
@@ -97,7 +97,7 @@ const useAuth = (socket) => {
   const register = (user) => {
     if (user.username && user.name && user.email && user.password && user.avatar_id) {
       return axios
-        .post(`/users`, { user })
+        .post(`https://pixelcide.herokuapp.com/users`, { user })
         .then((response) => {
           setUser({ ...response.data });
           sessionStorage.setItem("user", JSON.stringify({ ...response.data }));
@@ -112,7 +112,7 @@ const useAuth = (socket) => {
   const logout = () => {
     axiosJWT
       .post(
-        `/logout`,
+        `https://pixelcide.herokuapp.com/logout`,
         { token: user.refreshToken },
         {
           headers: { Authorization: `Bearer ${user.accessToken}` },
@@ -128,7 +128,7 @@ const useAuth = (socket) => {
   };
 
   const refreshToken = () => {
-    return axios.post(`/refresh`, { token: user.refreshToken }).then((res) => {
+    return axios.post(`https://pixelcide.herokuapp.com/refresh`, { token: user.refreshToken }).then((res) => {
       const refreshUser = {
         ...user,
         accessToken: res.data.accessToken,

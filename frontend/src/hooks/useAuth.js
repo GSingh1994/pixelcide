@@ -49,7 +49,7 @@ const useAuth = (socket) => {
 
   const updateUserAvatar = (avatarId) => {
     axios
-      .put("http://localhost:8080/users", {
+      .put("/users", {
         user: {
           id: user.id,
           avatar_id: avatarId,

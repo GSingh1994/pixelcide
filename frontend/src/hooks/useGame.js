@@ -564,6 +564,7 @@ const useGame = (socket, link, user) => {
       }
     });
 
+    socket.emit("Leave Room", link);
     if (playerFound) socket.emit("Game Over", link, user.id);
   };
 

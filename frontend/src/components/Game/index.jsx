@@ -5,7 +5,8 @@ import PlayerAid from "./PlayerAid";
 import Chat from "./Chat";
 import Loading from "../Loading";
 
-import { useEffect, useState } from "react";
+import { SocketContext } from "../../context/socket";
+import { useEffect, useState, useContext } from "react";
 import { Link } from "react-router-dom";
 import useGame from "../../hooks/useGame";
 
@@ -19,10 +20,16 @@ import helpIcon from "../../assets/icons/help.png";
 import styles from "../../styles/GameRoom/GameRoom.module.scss";
 
 const Game = (props) => {
+  const { user, link, game, startGame, leaveRoom } = props;
+  const socket = useContext(SocketContext);
+
+  const [openDialog, setOpenDialog] = useState(false);
+
   // Initializing Game States
   const {
     setup,
     setGame,
+    updateGame,
     started,
     handleCommands,
     moveCardTo,
@@ -32,8 +39,9 @@ const Game = (props) => {
     status,
     validate,
     decks,
-  } = useGame();
-  const { user, game, gamePlayers, updateGame } = props;
+    messages,
+    sendMessage,
+  } = useGame(socket, link, user);
 
   const [animation, SetAnimation] = useState(true);
 
@@ -41,9 +49,14 @@ const Game = (props) => {
   useEffect(() => {
     if (game.started) {
       setGame(game);
-    } else {
-      setup(game.players);
     }
+    if (user.host && !started) {
+      setup(game.players, startGame);
+    }
+
+    socket.on("Update Game", (key, data) => {
+      updateGame(key, data, false);
+    });
   }, []);
 
   useEffect(() => {
@@ -52,8 +65,18 @@ const Game = (props) => {
     }
     setTimeout(() => {
       SetAnimation(false);
-    }, 2000);
+    }, 1000);
   }, [started]);
+
+  const onConfirm = () => {
+    handleCommands("Leave Lobby");
+    leaveRoom();
+  };
+
+  const onBackToMenu = () => {
+    handleCommands("Game Over");
+    leaveRoom();
+  };
 
   return (
     <>
@@ -75,7 +98,7 @@ const Game = (props) => {
         <Confetti width={1900} height={950} />
       )}
       <AnimatePresence>
-        {!animation && (
+        {!animation && started && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -88,6 +111,7 @@ const Game = (props) => {
               status={status}
               jesterActive={boss.stats?.powerDisabled}
               bossSuit={boss.stats?.suit}
+              playerTurn={user.id === currentPlayer.id}
             />
             <DeckList
               tavern={decks.tavern}
@@ -100,6 +124,8 @@ const Game = (props) => {
               handleCommands={handleCommands}
               validate={validate}
               currentPlayer={currentPlayer}
+              onBackToMenu={onBackToMenu}
+              playerTurn={user.id === currentPlayer.id}
             />
             <PlayerList
               players={players}
@@ -110,11 +136,54 @@ const Game = (props) => {
               currentPlayer={currentPlayer}
               handleCommands={handleCommands}
             />
-            <motion.div className="close-icon">
-              <Link to={"/"}>
-                <img src={closeIcon} alt="" />
-              </Link>
-            </motion.div>
+
+            <div className="close-icon nes-pointer">
+              <img
+                src={closeIcon}
+                alt=""
+                onClick={() => setOpenDialog((pre) => !pre)}
+              />
+            </div>
+
+            {openDialog && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="close-dialog "
+              >
+                <p>Are you sure you wanna exit ?</p>
+                <div className="confirm-btns">
+                  <Link to={"/"}>
+                    <motion.button
+                      whileTap={{ scale: 0.9 }}
+                      whileHover={{ scale: 1.1 }}
+                      className="nes-btn is-error"
+                      onClick={onConfirm}
+                    >
+                      Confirm
+                    </motion.button>
+                  </Link>
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    whileHover={{ scale: 1.1 }}
+                    className="nes-btn is-success"
+                    onClick={() => setOpenDialog(false)}
+                  >
+                    Cancel
+                  </motion.button>
+                </div>
+              </motion.div>
+            )}
+
+            {openDialog && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="backdrop"
+              ></motion.div>
+            )}
 
             <motion.div
               whileHover={{ scale: 1.2 }}
@@ -128,7 +197,7 @@ const Game = (props) => {
                 <img src={helpIcon} alt="" />
               </a>
             </motion.div>
-            <Chat />
+            <Chat messages={messages} sendMessage={sendMessage} user={user} />
           </motion.div>
         )}
       </AnimatePresence>

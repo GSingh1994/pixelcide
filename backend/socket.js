@@ -2,6 +2,7 @@ const { Server } = require("socket.io");
 const { generateSessionID } = require("./helpers/authentication");
 const { LobbyStore } = require("./stores/lobbyStores");
 const { SessionStore } = require("./stores/sessionStores");
+const postGameResults = require("./helpers/socketDb");
 
 const options = {
   allowEIO3: true,
@@ -12,7 +13,7 @@ const options = {
   },
 };
 
-module.exports = (sessionMiddleware, httpServer) => {
+module.exports = (sessionMiddleware, httpServer, db) => {
   const io = new Server(httpServer, options);
 
   // convert a connect middleware to a Socket.IO middleware
@@ -98,7 +99,8 @@ module.exports = (sessionMiddleware, httpServer) => {
       console.log("Cancel Lobby");
       ls.cancelLobby(lobby);
 
-      ls.listLobbies();
+      const lobbies = ls.listLobbies();
+      socket.broadcast.to("lobbies").emit("Get Lobbies", lobbies);
     });
 
     socket.on("Request Lobby", (link) => {
@@ -115,7 +117,10 @@ module.exports = (sessionMiddleware, httpServer) => {
       console.log("Updated Lobby");
       console.log(updatedLobby);
 
+      const lobbies = ls.listLobbies();
+
       socket.broadcast.to(updatedLobby.link).emit("Update Lobby", updatedLobby);
+      socket.broadcast.to("lobbies").emit("Get Lobbies", lobbies);
     });
 
     /* ------------- ROOMS ------------- */
@@ -125,6 +130,34 @@ module.exports = (sessionMiddleware, httpServer) => {
 
     socket.on("Leave Room", (link) => {
       socket.leave(link);
+    });
+
+    /* ------------- GAME ------------- */
+    socket.on("Update Game", (link, key, data) => {
+      console.log("Update Game");
+      console.log(link, key, data);
+      ls.updateGame(link, key, data);
+
+      socket.broadcast.to(link).emit("Update Game", key, data);
+    });
+    /* ----------- LOGS --------------*/
+    socket.on("Start Game", (link) => {
+      console.log("Start Game");
+      ls.startGameTimer(link);
+    });
+
+    socket.on("Game Over", (link, state) => {
+      console.log("Game Over:", state);
+      const game = ls.endGameTimerAndPost(link, state);
+      console.log(game);
+      postGameResults(game, db);
+    });
+
+    socket.on("Leaver", (link, id) => {
+      console.log("Game Over LEAVE");
+      const game = ls.endGameTimerAndPost(link, "LEAVE", id);
+      console.log(game);
+      postGameResults(game, db);
     });
   });
 };

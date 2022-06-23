@@ -3,12 +3,20 @@ const { generateSessionID } = require("./helpers/authentication");
 const { LobbyStore } = require("./stores/lobbyStores");
 const { SessionStore } = require("./stores/sessionStores");
 
+const options = {
+  allowEIO3: true,
+  /* ... */
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+};
+
 module.exports = (sessionMiddleware, httpServer) => {
-  const io = new Server(httpServer);
+  const io = new Server(httpServer, options);
 
   // convert a connect middleware to a Socket.IO middleware
-  const wrap = (middleware) => (socket, next) =>
-    middleware(socket.request, {}, next);
+  const wrap = (middleware) => (socket, next) => middleware(socket.request, {}, next);
 
   // Use sessionMiddleware to listen to socket requests
   io.use(wrap(sessionMiddleware));

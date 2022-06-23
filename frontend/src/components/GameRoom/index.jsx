@@ -18,17 +18,18 @@ const GameRoom = (props) => {
   const navigate = useNavigate();
   const socket = useContext(SocketContext);
 
-  const {
-    lobby,
-    takeSeat,
-    updateSeats,
-    startGame,
-    updateLobby,
-    mode,
-    seats,
-    game,
-    error,
-  } = props.state;
+  const { lobby, takeSeat, updateSeats, startGame, setupGame, updateGame, updateLocalLobby, cancelLobby, mode, seats, game, error } = props.state;
+
+  const leaveRoom = () => {
+    // If user leaves lobby, cancel it
+    if (user.host) {
+      cancelLobby();
+    }
+
+    // leave lobby room listener and join lobbies listener
+    socket.emit("Leave Room", id);
+    socket.emit("Join Room", "lobbies");
+  };
 
   useEffect(() => {
     // Only reload lobby data if not created by host
@@ -37,8 +38,9 @@ const GameRoom = (props) => {
       // Request lobby object based on url parameter
       socket.emit("Request Lobby", id);
     } else {
+      const newMode = lobby.game.started ? "Game" : "Room";
       // Update state to Room
-      updateLobby(lobby, "Room");
+      updateLocalLobby(lobby, newMode);
     }
 
     // Check and assign if user is host
@@ -66,63 +68,38 @@ const GameRoom = (props) => {
       }
 
       // Set lobby based on recieved lobby from listener and update mode
-      updateLobby(newLobby, "Room");
+      const newMode = lobby.game.started ? "Game" : "Room";
+      updateLocalLobby(newLobby, newMode);
     });
 
     // Listens for all update lobby broadcasts
     socket.on("Update Lobby", (lobby) => {
-      updateLobby(lobby);
+      const newMode = lobby.game.started ? "Game" : "Room";
+
+      updateLocalLobby(lobby, newMode);
     });
 
     // eslint-disable-next-line
-  }, [socket]);
+  }, []);
 
-  // const fakePlayers = [
-  //   {
-  //     id: 1,
-  //     username: "picklerick",
-  //     avatar_id: 1,
-  //   },
-  //   {
-  //     id: 2,
-  //     username: "hyrule",
-  //     avatar_id: 2,
-  //   },
-  //   {
-  //     id: 3,
-  //     username: "gagan420",
-  //     avatar_id: 3,
-  //   },
-  //   {
-  //     id: 4,
-  //     username: "momotrq94",
-  //     avatar_id: 4,
-  //   },
-  // ];
+  console.log("GameRoom mode:", lobby);
 
   return (
     <>
       {(mode === "Room" || mode === "Loading") && (
         <>
           <div className={styles.Homepage}></div>
-          <Navbar userAuth={userAuth} user={user} logout={logout} />
+          <Navbar userAuth={userAuth} user={user} logout={logout} updateUserAvatar={updateUserAvatar} />
         </>
       )}
       {mode === "Room" && (
         <>
           <h1 className={styles.Title}>{`<${lobby.title}>`}</h1>
-          <Room
-            user={user}
-            handleStartGame={startGame}
-            seats={seats}
-            updateSeats={updateSeats}
-            takeSeat={takeSeat}
-            error={error}
-          />
+          <Room user={user} handleSetupGame={setupGame} seats={seats} updateSeats={updateSeats} takeSeat={takeSeat} error={error} leaveRoom={leaveRoom} />
         </>
       )}
       {mode === "Loading" && <Loading />}
-      {mode === "Game" && <Game user={user} game={game} />}
+      {((mode === "Setup" && user.host) || mode === "Game") && <Game user={user} game={game} link={id} startGame={startGame} updateGame={updateGame} leaveRoom={cancelLobby} />}
     </>
   );
 };

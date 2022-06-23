@@ -20,25 +20,131 @@ import axios from "axios";
 import _ from "lodash";
 import { useEffect, useState } from "react";
 
-const useGame = () => {
-  const [decks, setDecks] = useState([]);
-  const [boss, setBoss] = useState([]);
-  const [cycle, setCycle] = useState([]);
+const useGame = (socket, link, user) => {
+  const [decks, setDecks] = useState({ tavern: [], discard: [], castle: [] });
+  const [boss, setBoss] = useState({ current: {}, stats: {}, preview: {} });
+  const [cycle, setCycle] = useState({ current: [], original: [] });
   const [players, setPlayers] = useState([]);
   const [status, setStatus] = useState("setup");
-  const [validate, setValidate] = useState([]);
+  const [validate, setValidate] = useState({});
   const [currentPlayer, setCurrentPlayer] = useState({});
   const [maxHand, setMaxHand] = useState(0);
   const [started, setStarted] = useState(false);
+  const [messages, setMessages] = useState([]);
+
+  const updateGame = (key, data, local = true) => {
+    let changes = data;
+
+    switch (key) {
+      case "decks":
+        setDecks((prev) => {
+          changes = { ...prev, ...data };
+          if (local) {
+            socket.emit("Update Game", link, key, changes);
+            return changes;
+          }
+
+          return data;
+        });
+        break;
+      case "boss":
+        setBoss((prev) => {
+          changes = { ...prev, ...data };
+          if (local) {
+            socket.emit("Update Game", link, key, changes);
+            return changes;
+          }
+
+          return data;
+        });
+        break;
+      case "cycle":
+        setCycle((prev) => {
+          changes = { ...prev, ...data };
+          if (local) {
+            socket.emit("Update Game", link, key, changes);
+            return changes;
+          }
+
+          return data;
+        });
+        break;
+      case "players":
+        setPlayers(() => {
+          changes = [...data];
+          if (local) {
+            socket.emit("Update Game", link, key, changes);
+            return changes;
+          }
+
+          return data;
+        });
+        break;
+      case "status":
+        setStatus(() => {
+          if (local) socket.emit("Update Game", link, key, data);
+          return data;
+        });
+        break;
+      case "validate":
+        setValidate((prev) => {
+          changes = { ...prev, ...data };
+          if (local) {
+            socket.emit("Update Game", link, key, changes);
+            return changes;
+          }
+
+          return data;
+        });
+        break;
+      case "currentPlayer":
+        setCurrentPlayer((prev) => {
+          changes = { ...prev, ...data };
+          if (local) {
+            socket.emit("Update Game", link, key, changes);
+            return changes;
+          }
+
+          return data;
+        });
+        break;
+      case "maxHand":
+        setMaxHand(() => {
+          if (local) socket.emit("Update Game", link, key, data);
+          return data;
+        });
+        break;
+      case "started":
+        setStarted(() => {
+          if (local) socket.emit("Update Game", link, key, data);
+          return data;
+        });
+
+        break;
+      case "messages":
+        setMessages((prev) => {
+          changes = [data, ...prev];
+          if (local) {
+            socket.emit("Update Game", link, key, changes);
+            return changes;
+          }
+
+          return data;
+        });
+        break;
+      default:
+        return;
+    }
+  };
 
   useEffect(() => {
     // On player turn start, turn if then have cards to play
     if (status === "player_turn") {
       setTimeout(() => {
         if (currentPlayer.hand.length <= 0) {
-          setStatus("game_over_lose");
+          updateGame("status", "game_over_lose");
         } else {
-          setStatus("player_attack");
+          updateGame("status", "player_attack");
         }
       }, 2000);
     }
@@ -47,28 +153,25 @@ const useGame = () => {
     if (status === "boss_turn") {
       setTimeout(() => {
         if (playerDead(currentPlayer, boss.stats.damage)) {
-          setStatus("game_over_lose");
+          updateGame("status", "game_over_lose");
         } else {
-          setStatus("boss_attack");
+          updateGame("status", "boss_attack");
         }
       }, 2000);
     }
 
     // Reset joker on game end
     if (status === "game_over_lose" || status === "game_over_win") {
-      setBoss((prev) => {
-        const bossCopy = _.cloneDeep(prev);
-        bossCopy.stats.powerDisabled = false;
-
-        return bossCopy;
-      });
+      const statsCopy = _.cloneDeep(boss.stats);
+      statsCopy.powerDisabled = false;
+      updateGame("boss", { stats: statsCopy });
     }
   }, [status]);
 
   useEffect(() => {
     // Update currentPlayer data everytime player data changes
     if (status !== "setup") {
-      setCurrentPlayer(players[cycle.current[0]]);
+      updateGame("currentPlayer", players[cycle.current[0]]);
     }
 
     if (status === "player_attack") {
@@ -86,7 +189,7 @@ const useGame = () => {
       bossCopy.preview.health = newBossHealth?.toString();
 
       // Save status
-      setBoss(bossCopy);
+      updateGame("boss", { ...bossCopy });
     }
   }, [players]);
 
@@ -123,19 +226,25 @@ const useGame = () => {
 
     // Use a copy so currentPlayer still references players array
     const playersCopy = _.cloneDeep(game.players);
+
     setPlayers(playersCopy);
     setCurrentPlayer(playersCopy[game.cycle.current[0]]);
 
-    setStatus(_.cloneDeep(game.status));
-    setValidate(_.cloneDeep(game.validateButton));
+    setValidate(_.cloneDeep(game.validate));
     setMaxHand(game.maxHand);
+    setStatus(_.cloneDeep(game.status));
     setStarted(game.started);
+    setMessages(_.cloneDeep(game.messages));
   };
 
-  const setup = (playerList) => {
+  const setup = (playerList, startGame) => {
+    const game = {};
+    game.decks = {};
+    game.messages = [];
+
     // Get max hand size based on number of players
-    const _maxHand = calcMaxHand(playerList.length);
-    setMaxHand(_maxHand);
+    game.maxHand = calcMaxHand(playerList.length);
+    setMaxHand(game.maxHand);
 
     // Request for list of all cards from api server
     axios
@@ -144,14 +253,15 @@ const useGame = () => {
         const cards = response.data;
 
         setDecks(() => {
-          const castleDeck = makeCastle(cards);
-          const tavernDeck = makeTavern(cards, playerList.length);
+          game.decks.castle = makeCastle(cards);
+          game.decks.tavern = makeTavern(cards, playerList.length);
+          game.decks.discard = [];
 
           // Assign boss card and stats
           setBoss(() => {
-            const lastCastleCard = castleDeck.at(-1);
+            const lastCastleCard = game.decks.castle.at(-1);
 
-            const boss = {
+            game.boss = {
               current: lastCastleCard,
               stats: {
                 damage: lastCastleCard.damage,
@@ -165,15 +275,15 @@ const useGame = () => {
               },
             };
 
-            return boss;
+            return _.cloneDeep(game.boss);
           });
 
           // Assign starting hand for each player
           setPlayers(() => {
-            const setupPlayers = playerList.map((player) => {
+            game.players = playerList.map((player) => {
               return {
                 ...player,
-                hand: makeHand(tavernDeck, _maxHand),
+                hand: makeHand(game.decks.tavern, game.maxHand),
                 field: [],
                 discard: [],
                 played: [],
@@ -181,9 +291,10 @@ const useGame = () => {
             });
 
             //Assign currentPlayer as a reference
-            setCurrentPlayer(setupPlayers[0]);
+            game.currentPlayer = game.players[0];
+            setCurrentPlayer(game.currentPlayer);
 
-            return setupPlayers;
+            return _.cloneDeep(game.players);
           });
 
           /* Set Cycle (Player turn order)
@@ -195,9 +306,13 @@ const useGame = () => {
           const cycleList = [];
           playerList.forEach((player, index) => cycleList.push(index));
 
-          setCycle({
-            original: [...cycleList],
-            current: [...cycleList],
+          setCycle(() => {
+            game.cycle = {
+              original: [...cycleList],
+              current: [...cycleList],
+            };
+
+            return _.cloneDeep(game.cycle);
           });
 
           /* Set ValidateButton (Handles enabling of Discard and Attack button) 
@@ -205,25 +320,39 @@ const useGame = () => {
               - attack -> true if valid attack
               - discardVal -> remaining amount required to discard
         */
-          setValidate({
-            discardButton: false,
-            attackButton: false,
-            discardValue: 0,
+          setValidate(() => {
+            game.validate = {
+              discardButton: false,
+              attackButton: false,
+              discardValue: 0,
+            };
+
+            return _.cloneDeep(game.validate);
           });
 
           // Change status to player_turn once setup is complete
-          setStatus("player_turn");
+          setStatus(() => {
+            game.status = "player_turn";
+
+            return game.status;
+          });
 
           // Setup starting decks
           return {
             discard: [],
-            tavern: tavernDeck,
-            castle: castleDeck,
+            tavern: _.cloneDeep(game.decks.tavern),
+            castle: _.cloneDeep(game.decks.castle),
           };
         });
 
         setTimeout(() => {
-          setStarted(true);
+          setStarted(() => {
+            game.started = true;
+            return true;
+          });
+
+          socket.emit("Start Game", link);
+          startGame(game);
         }, 400);
       })
       .catch((err) => {
@@ -248,10 +377,10 @@ const useGame = () => {
     bossCopy.preview.health = null;
 
     // Save state
-    setBoss(bossCopy);
+    updateGame("boss", { ...bossCopy });
 
     // Proceed to boss attack phase
-    setStatus("boss_attack");
+    updateGame("status", "boss_attack");
   };
 
   const handlePlayerAttack = () => {
@@ -353,17 +482,17 @@ const useGame = () => {
     }
 
     // Update all deck, boss and player data
-    setDecks({
+    updateGame("decks", {
       discard: discardDeck,
       tavern: tavernDeck,
       castle: castleDeck,
     });
 
-    setCycle(cycleCopy);
-    setBoss(bossCopy);
-    setPlayers(playersCopy);
+    updateGame("cycle", { ...cycleCopy });
+    updateGame("boss", { ...bossCopy });
+    updateGame("players", playersCopy);
     setTimeout(() => {
-      setStatus(newStatus);
+      updateGame("status", newStatus);
     }, 100);
   };
 
@@ -386,19 +515,14 @@ const useGame = () => {
     }
 
     // Save changes
-    setPlayers(playersCopy);
-    setCycle(cycleCopy);
-    setCurrentPlayer(playersCopy[cycleCopy.current[0]]);
+    updateGame("players", playersCopy);
+    updateGame("cycle", { ...cycleCopy });
+    updateGame("currentPlayer", { ...playersCopy[cycleCopy.current[0]] });
 
     // Go to next player
-    setStatus("player_turn");
+    updateGame("status", "player_turn");
 
-    setDecks((prev) => {
-      return {
-        ...prev,
-        discard: discardDeck,
-      };
-    });
+    updateGame("decks", { discard: discardDeck });
   };
 
   const handleSelect = (id) => {
@@ -416,24 +540,27 @@ const useGame = () => {
     cycleCopy.current.unshift(id);
 
     // Update Current Player
-    setCurrentPlayer(players[cycleCopy.current[0]]);
+    updateGame("currentPlayer", { ...players[cycleCopy.current[0]] });
 
     // Save state and go to next player
-    setCycle(cycleCopy);
-    setStatus("player_turn");
+    updateGame("cycle", cycleCopy);
+    updateGame("status", "player_turn");
   };
 
-  const handleGameOver = (condition) => {
-    // condition = true or false
-    // Leave game
-    // Axios request to update game table with new state
+  const handleGameOver = () => {
+    if (user.host) {
+      const state = status === "game_over_win" ? "WIN" : "LOSS";
+      socket.emit("Game Over", link, state);
+    }
   };
 
   const handleLeaver = () => {
-    // set user_games status to leaver for specific user
+    socket.emit("Game Over", link, user.id);
   };
 
   const handleCommands = (command, condition = false) => {
+    if (currentPlayer.id !== user.id) return;
+
     switch (command) {
       case "Yield":
         handleYield();
@@ -460,6 +587,7 @@ const useGame = () => {
 
   const moveCardTo = (card, area, playable = true, playCardSound = null) => {
     if (!playable) return;
+    if (currentPlayer.id !== user.id) return;
 
     switch (area) {
       case "Hand":
@@ -479,7 +607,7 @@ const useGame = () => {
 
         // Add card to player hand and save
         currentPlayer.hand = [...currentPlayer.hand, card];
-        setPlayers(playersCopy);
+        updateGame("players", playersCopy);
         break;
       case "Discard":
         if (status === "boss_attack") {
@@ -495,7 +623,7 @@ const useGame = () => {
           playCardSound();
 
           // Save player state
-          setPlayers(playersCopy);
+          updateGame("players", playersCopy);
         }
         break;
       case "Field":
@@ -513,7 +641,7 @@ const useGame = () => {
           playCardSound();
 
           // Save player state
-          setPlayers(playersCopy);
+          updateGame("players", playersCopy);
         }
         break;
       default:
@@ -521,9 +649,14 @@ const useGame = () => {
     }
   };
 
+  const sendMessage = (message) => {
+    updateGame("messages", message);
+  };
+
   return {
     setup,
     setGame,
+    updateGame,
     started,
     handleCommands,
     moveCardTo,
@@ -533,6 +666,9 @@ const useGame = () => {
     status,
     validate,
     decks,
+    cycle,
+    messages,
+    sendMessage,
   };
 };
 

@@ -1,6 +1,6 @@
 # Pixelcide
 
-Pixcelcide is a cooperative multiplayer game based on the card game [Regicide](https://www.badgersfrommars.com/assets/RegicideRulesA4.pdf). The app was built using React, React Router and Framer motion on the frontend. The backend was built on express with JSON Web Tokens used for authentication. The database was created on PostgreSQL and socket io was used to handle real time communication between players.
+Pixcelcide is a cooperative multiplayer card game based on the card game [Regicide](https://www.badgersfrommars.com/assets/RegicideRulesA4.pdf). The app was built using React, React Router and Framer motion on the frontend. The backend was built on express with JSON Web Tokens used for authentication. The database was created on PostgreSQL and socket io was used to handle real time communication between players.
 
 ## [🚀 Live demo](https://pixelcide.netlify.app/)
 
